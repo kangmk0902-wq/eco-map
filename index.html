@@ -1,18 +1,253 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pages 테스트</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>학교 생태지도 — 공동편집(위치저장 패치)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Firebase 연결 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, doc, addDoc, setDoc, deleteDoc, onSnapshot, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+   const firebaseConfig = {
+    apiKey: "AIzaSyAswUcFMIVPFt788AcVWbq-dEdkDqZtnKw",
+    authDomain: "dnfl-ad972.firebaseapp.com",
+    projectId: "dnfl-ad972",
+    storageBucket: "dnfl-ad972.firebasestorage.app",
+    messagingSenderId: "548990645593",
+    appId: "1:548990645593:web:7478899875a9d106c4c848",
+    measurementId: "G-XW14X9HSQE"
+  };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    window.__fire = { db, collection, doc, addDoc, setDoc, deleteDoc, onSnapshot, query, serverTimestamp };
+  </script>
   <style>
-    body{margin:0;height:100vh;display:grid;place-items:center;font-family:system-ui;background:#0b132b;color:#e5e7eb}
-    .box{padding:24px;border:1px solid #334155;border-radius:12px;background:#111827}
+    html, body { height: 100%; margin: 0; }
+    header { height:56px; display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:#0b132b; color:#e5e7eb; box-sizing:border-box; gap:10px; font-family:system-ui, sans-serif; }
+    header .left { display:flex; align-items:center; gap:8px; }
+    header input { height:36px; padding:0 10px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#e5e7eb; }
+    header button { height:36px; padding:0 12px; border-radius:10px; border:1px solid #334155; background:#2563eb; color:white; cursor:pointer; }
+    header .ghost { background:#0f172a; color:#e5e7eb; }
+
+    #map { width: 100%; height: calc(100% - 56px); background:#f3f4f6; }
+
+    #searchPanel { position:absolute; top:66px; left:10px; width:270px; background:rgba(15,23,42,.96); color:#f1f5f9; padding:12px; border-radius:12px; z-index:1000; font-family:system-ui,sans-serif; font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,.35); }
+    #searchPanel label { display:block; margin-top:6px; color:#cbd5e1; font-size:13px; }
+    #searchPanel input, #searchPanel select { width:100%; margin-top:4px; padding:6px 8px; border-radius:8px; border:1px solid #334155; background:#1e293b; color:#f1f5f9; box-sizing:border-box; }
+    #searchPanel .row { display:flex; gap:8px; margin-top:8px; }
+    #searchPanel button { flex:1; background:#2563eb; border:none; border-radius:8px; padding:6px 10px; color:white; cursor:pointer; }
+    #searchPanel button.ghost { background:#0f172a; border:1px solid #334155; color:#e5e7eb; }
+
+    .legend { position:absolute; right:10px; bottom:10px; z-index:1000; background:#0b132b; color:#e5e7eb; border:1px solid #1f2937; border-radius:10px; padding:8px 10px; font-family:system-ui,sans-serif; font-size:13px; box-shadow:0 4px 14px rgba(0,0,0,.2); }
+    .legend .row { display:flex; align-items:center; gap:8px; margin:4px 0; }
+    .legend .dot { width:12px; height:12px; border-radius:999px; display:inline-block; border:1px solid rgba(0,0,0,.25);} 
+    .dot-producer { background:#22c55e; }
+    .dot-consumer { background:#f59e0b; }
+    .dot-decomposer { background:#ef4444; }
+
+    .leaflet-popup-content { font-family: system-ui, sans-serif; font-size:14px; }
+    .popup-input, select { width: 100%; margin: 6px 0; padding: 6px 8px; box-sizing: border-box; border:1px solid #cbd5e1; border-radius:8px; }
+    .popup-textarea { width: 100%; height: 72px; box-sizing: border-box; border:1px solid #cbd5e1; border-radius:8px; padding:6px 8px; }
+    .popup-btn { padding: 6px 10px; margin: 6px 4px 0 0; border-radius:8px; border:1px solid #94a3b8; background:#0ea5e9; color:#fff; cursor:pointer; }
+    .popup-btn.secondary { background:#f3f4f6; color:#111827; }
+    .popup-btn.danger { background:#fee2e2; border-color:#fecaca; color:#991b1b; }
+
+    #infoBanner { position:absolute; top:66px; left:50%; transform:translateX(-50%); background:#fde68a; color:#1f2937; padding:6px 12px; border-radius:10px; z-index:1000; display:none; font-family:system-ui,sans-serif; font-size:13px; border:1px solid #f59e0b; }
   </style>
 </head>
 <body>
-  <div class="box">
-    <h1>✅ GitHub Pages 정상 동작</h1>
-    <p>이 화면이 보이면, 이제 생태지도 파일로 교체하면 됩니다.</p>
+  <header>
+    <div class="left">
+      <strong>학교 생태지도 · 공동편집</strong>
+      <input id="roomInput" placeholder="지도 코드 (예: bio3-1)" />
+      <button id="joinBtn" class="ghost">접속/변경</button>
+    </div>
+    <div class="right">
+      현재 방: <span id="roomLabel" style="font-weight:700;">-</span>
+      <button id="exportBtn" style="margin-left:8px; background:#16a34a; border:1px solid #14532d;">현재 데이터 저장(JSON)</button>
+    </div>
+  </header>
+
+  <div id="searchPanel">
+    <div style="font-weight:700; margin-bottom:6px;">🔎 검색·필터</div>
+    <label>역할</label>
+    <select id="roleFilter">
+      <option value="">전체</option>
+      <option value="producer">생산자</option>
+      <option value="consumer">소비자</option>
+      <option value="decomposer">분해자</option>
+    </select>
+    <label>학생 이름</label>
+    <input id="studentFilter" placeholder="예: 홍길동" />
+    <label>생물이름(학명)</label>
+    <input id="sciNameFilter" placeholder="예: Pinus" />
+    <div class="row">
+      <button id="applyFilter">적용</button>
+      <button id="clearFilter" class="ghost">초기화</button>
+    </div>
   </div>
+
+  <div id="map"></div>
+  <div id="infoBanner">배경 사진(school.png)을 같은 폴더에 넣어 주세요.</div>
+  <div class="legend" id="legend">
+    <div style="font-weight:700; margin-bottom:4px;">범례</div>
+    <div class="row"><span class="dot dot-producer"></span><span>생산자</span></div>
+    <div class="row"><span class="dot dot-consumer"></span><span>소비자</span></div>
+    <div class="row"><span class="dot dot-decomposer"></span><span>분해자</span></div>
+  </div>
+
+  <script type="module">
+    const { db, collection, doc, addDoc, setDoc, deleteDoc, onSnapshot, query, serverTimestamp } = window.__fire;
+
+    // === 지도 ===
+    const map = L.map('map', { crs: L.CRS.Simple, minZoom: -1, maxZoom: 3 });
+
+    // 배경 이미지 자동 로드 (파일이 없으면 배너 표시)
+    const imageUrl = 'school.png';
+    function setBanner(show, msg){ const b=document.getElementById('infoBanner'); if(!b) return; b.style.display=show?'block':'none'; if(msg) b.textContent=msg; }
+    (function loadBackground(){
+      const img = new Image();
+      img.onload = ()=>{ const w=img.naturalWidth||2000, h=img.naturalHeight||1000; const bounds=[[0,0],[h,w]]; L.imageOverlay(imageUrl, bounds).addTo(map); map.fitBounds(bounds); setBanner(false); };
+      img.onerror = ()=>{ setBanner(true, '배경 사진(school.png)을 같은 폴더에 넣어 주세요.'); const bounds=[[0,0],[1000,2000]]; map.fitBounds(bounds); };
+      img.src = imageUrl;
+    })();
+
+    function makeIcon(color){ const svg=encodeURIComponent(`<?xml version='1.0'?><svg xmlns='http://www.w3.org/2000/svg' width='28' height='42' viewBox='0 0 28 42'><path fill='${color}' d='M14 0C6.27 0 0 6.27 0 14c0 9.8 12.6 26.7 13.14 27.4a1 1 0 0 0 1.72 0C15.4 40.7 28 23.8 28 14 28 6.27 21.73 0 14 0z'/><circle cx='14' cy='14' r='6' fill='white'/></svg>`); return L.icon({iconUrl:`data:image/svg+xml,${svg}`,iconSize:[28,42],iconAnchor:[14,42],popupAnchor:[0,-38]}); }
+    const ICONS = { producer: makeIcon('#22c55e'), consumer: makeIcon('#f59e0b'), decomposer: makeIcon('#ef4444') };
+
+    // === 방 관리 ===
+    let roomId = (localStorage.getItem('eco_room') || 'bio3-1');
+    const roomInput = document.getElementById('roomInput');
+    const roomLabel = document.getElementById('roomLabel');
+    roomInput.value = roomId; roomLabel.textContent = roomId;
+
+    const markers = new Map();
+    const dataMap = new Map();
+    let unsubscribe = null;
+
+    function bindMarkerEvents(marker){
+      marker.on('click', ()=> openView(marker, marker.__data));
+      marker.on('contextmenu', async ()=>{ try{ if(confirm('이 지점을 삭제할까요?')) await deleteDoc(doc(db,'maps',roomId,'points',marker.__data.id)); }catch(e){ alert('삭제 실패: '+e.message); console.error(e); } });
+    }
+
+    function subscribe(room){
+      if (unsubscribe) { unsubscribe(); markers.forEach(m=>map.removeLayer(m)); markers.clear(); dataMap.clear(); }
+      const colRef = collection(db,'maps',room,'points');
+      unsubscribe = onSnapshot(query(colRef), (snap)=>{
+        const seen = new Set();
+        snap.forEach(dSnap=>{ const d={ id:dSnap.id, ...dSnap.data() }; seen.add(d.id); dataMap.set(d.id,d); const icon=ICONS[d.role]||ICONS.producer; if(!markers.has(d.id)){ const m=L.marker(d.latlng,{icon}).addTo(map); m.__data=d; markers.set(d.id,m); bindMarkerEvents(m);} else { const m=markers.get(d.id); m.__data=d; m.setLatLng(d.latlng); m.setIcon(icon);} });
+        Array.from(markers.keys()).forEach(id=>{ if(!seen.has(id)){ map.removeLayer(markers.get(id)); markers.delete(id); dataMap.delete(id);} });
+        applyFilters();
+      }, (err)=>{ setBanner(true, 'Firestore 연결 오류: '+err.message); console.error(err); });
+    }
+
+    function roleToText(r){ return r==='producer'?'생산자':r==='consumer'?'소비자':r==='decomposer'?'분해자':'-'; }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+    function escapeAttr(s){ return String(s||'').replace(/\"/g,'&quot;'); }
+
+    function openView(marker, data){
+      const el = document.createElement('div');
+      el.innerHTML = `
+        <div style='font-size:16px; font-weight:700; margin-bottom:6px;'>${escapeHtml(data.sciName||'미기재')}</div>
+        <div class='kv'><b>역할</b> ${escapeHtml(roleToText(data.role))}</div>
+        <div class='kv'><b>학번·이름</b> ${escapeHtml(data.student||'-')}</div>
+        <div class='kv'><b>생물이름(학명)</b> ${escapeHtml(data.sciName||'-')}</div>
+        <div class='kv'><b>먹이</b> ${escapeHtml(data.diet||'-')}</div>
+        <div class='kv'><b>포식자</b> ${escapeHtml(data.predator||'-')}</div>
+        <div class='kv'><b>특징</b> ${escapeHtml(data.feature||'-')}</div>
+        <div style='margin-top:8px; display:flex; gap:6px;'>
+          <button id='edit' type='button' class='popup-btn'>편집</button>
+          <button id='del' type='button' class='popup-btn danger'>삭제</button>
+        </div>`;
+      const onEdit = ()=> openEdit(marker, data, false);
+      const onDel = async ()=>{ try{ if(confirm('이 지점을 삭제할까요?')) await deleteDoc(doc(db,'maps',roomId,'points',data.id)); }catch(e){ alert('삭제 실패: '+e.message); console.error(e);} };
+      el.addEventListener('click', (ev)=>ev.stopPropagation());
+      el.querySelector('#edit').addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); onEdit(); });
+      el.querySelector('#del').addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); onDel(); });
+      L.DomEvent.disableClickPropagation(el);
+      L.DomEvent.disableScrollPropagation(el);
+      marker.bindPopup(el,{autoClose:false}).openPopup();
+    }
+
+    function openEdit(marker, data, isNew){
+      const el = document.createElement('div');
+      el.innerHTML = `
+        <select id='role' class='popup-input'>
+          <option value='producer' ${data.role==='producer'?'selected':''}>생산자</option>
+          <option value='consumer' ${data.role==='consumer'?'selected':''}>소비자</option>
+          <option value='decomposer' ${data.role==='decomposer'?'selected':''}>분해자</option>
+        </select>
+        <input id='f_student' class='popup-input' placeholder='학번과 이름' value='${escapeAttr(data.student||'')}' />
+        <input id='f_science' class='popup-input' placeholder='생물이름(학명)' value='${escapeAttr(data.sciName||'')}' />
+        <input id='f_diet' class='popup-input' placeholder='먹이' value='${escapeAttr(data.diet||'')}' />
+        <input id='f_pred' class='popup-input' placeholder='포식자' value='${escapeAttr(data.predator||'')}' />
+        <textarea id='f_feat' class='popup-textarea' placeholder='특징'>${escapeHtml(data.feature||'')}</textarea>
+        <div style='display:flex; gap:6px; flex-wrap:wrap;'>
+          <button id='save' type='button' class='popup-btn'>저장</button>
+          <button id='cancel' type='button' class='popup-btn secondary'>취소</button>
+          ${!isNew?"<button id='del' type='button' class='popup-btn danger'>삭제</button>":''}
+        </div>`;
+
+      const doSave = async ()=>{
+        // 🔧 LatLng → plain {lat,lng} for Firestore
+        const ll = marker.getLatLng();
+        const latlng = { lat: ll.lat, lng: ll.lng };
+        const payload = {
+          role: el.querySelector('#role').value,
+          student: el.querySelector('#f_student').value.trim(),
+          sciName: el.querySelector('#f_science').value.trim(),
+          diet: el.querySelector('#f_diet').value.trim(),
+          predator: el.querySelector('#f_pred').value.trim(),
+          feature: el.querySelector('#f_feat').value.trim(),
+          latlng,
+          updatedAt: serverTimestamp()
+        };
+        try{
+          if (isNew) { 
+            await addDoc(collection(db,'maps',roomId,'points'), payload); 
+            map.removeLayer(marker); 
+          } else { 
+            await setDoc(doc(db,'maps',roomId,'points',data.id), payload, { merge:true }); 
+          }
+        }catch(e){
+          alert('저장 실패: '+e.message+'\\n(규칙/권한 또는 네트워크를 확인하세요)');
+          console.error(e);
+        }
+      };
+      const doCancel = ()=>{ if(isNew){ map.removeLayer(marker);} else { openView(marker, data);} };
+      const doDel = async ()=>{ try{ if(confirm('이 지점을 삭제할까요?')) await deleteDoc(doc(db,'maps',roomId,'points',data.id)); }catch(e){ alert('삭제 실패: '+e.message); console.error(e);} };
+
+      el.addEventListener('click', (ev)=>ev.stopPropagation());
+      el.querySelector('#save').addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); doSave(); });
+      el.querySelector('#cancel').addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); doCancel(); });
+      const delBtn = el.querySelector('#del');
+      if (delBtn) delBtn.addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); doDel(); });
+      L.DomEvent.disableClickPropagation(el);
+      L.DomEvent.disableScrollPropagation(el);
+
+      marker.bindPopup(el,{autoClose:false}).openPopup();
+    }
+
+    // 지도 클릭 → 새 점 추가(편집 팝업)
+    map.on('click', e=>{ const temp={ role:'producer', student:'', sciName:'', diet:'', predator:'', feature:'', latlng:{lat:e.latlng.lat,lng:e.latlng.lng} }; const m=L.marker(e.latlng,{icon:ICONS.producer}).addTo(map); m.__data={ id:'temp', ...temp }; bindMarkerEvents(m); openEdit(m, temp, true); });
+
+    // 방 접속/변경
+    document.getElementById('joinBtn').onclick = ()=>{ roomId=(roomInput.value||'').trim()||'bio3-1'; localStorage.setItem('eco_room',roomId); roomLabel.textContent=roomId; subscribe(roomId); };
+
+    // JSON 저장
+    document.getElementById('exportBtn').onclick = ()=>{ const data=Array.from(dataMap.values()); const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`생태지도_${roomId}.json`; a.click(); };
+
+    // 검색/필터
+    const roleEl=document.getElementById('roleFilter'); const studentEl=document.getElementById('studentFilter'); const sciEl=document.getElementById('sciNameFilter');
+    function matchesFilter(d){ const role=roleEl.value.trim(); const student=studentEl.value.trim(); const sci=sciEl.value.trim(); if(role && d.role!==role) return false; if(student && !(d.student||'').includes(student)) return false; if(sci && !(d.sciName||'').includes(sci)) return false; return true; }
+    function applyFilters(){ markers.forEach((m,id)=>{ const d=dataMap.get(id); if(!d){ if(map.hasLayer(m)) map.removeLayer(m); return;} const vis=matchesFilter(d); if(vis){ if(!map.hasLayer(m)) m.addTo(map);} else { if(map.hasLayer(m)) map.removeLayer(m);} }); }
+    document.getElementById('applyFilter').onclick=applyFilters; document.getElementById('clearFilter').onclick=()=>{ roleEl.value=''; studentEl.value=''; sciEl.value=''; applyFilters(); };
+
+    // 초기 구독
+    subscribe(roomId);
+  </script>
 </body>
 </html>
